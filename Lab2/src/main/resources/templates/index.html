@@ -1,0 +1,74 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Notepad</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 32px; }
+    h1 { margin-bottom: 8px; }
+    .muted { color: #666; font-size: 12px; }
+    form, .note { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+    input[type=text], textarea { width: 100%; padding: 8px; margin: 6px 0; }
+    button { padding: 6px 12px; cursor: pointer; }
+    .row { display: flex; gap: 12px; align-items: center; }
+    .note h3 { margin: 0 0 6px 0; }
+    .right { margin-left: auto; }
+	.btn-action {
+	  background: #f3f3f3;
+	  border: 1px solid #ccc;
+	  border-radius: 6px;
+	  padding: 4px 6px;
+	  text-decoration: none;
+	  color: #222;
+	  font-size: 14px;
+	  cursor: pointer;
+	}
+
+	.btn-action:hover {
+	  background: #e6e6e6;
+	}
+  </style>
+</head>
+<body>
+  <h1>Notepad</h1>
+  <div class="muted">Active profile: <span th:text="${appProfile}">default</span></div>
+
+  <form method="post" action="/notes">
+    <h2>Створити нотатку</h2>
+    <label>Заголовок</label>
+    <input type="text" name="title" placeholder="Заголовок"/>
+    <label>Текст</label>
+    <textarea name="content" rows="4" placeholder="Напишіть щось..."></textarea>
+    <button type="submit">Додати</button>
+	<label>Пріоритет</label>
+	<select name="priority">
+	  <option value="LOW">Низький</option>
+	  <option value="MEDIUM" selected>Середній</option>
+	  <option value="HIGH">Високий</option>
+	</select>
+  </form>
+
+  <h2>Мої нотатки</h2>
+  <div th:if="${#lists.isEmpty(notes)}">Немає нотаток.</div>
+  <div th:each="n : ${notes}" class="note">
+    <div class="row">
+      <h3 th:text="${n.title} ?: 'Без назви'">Заголовок</h3>
+	  <span th:switch="${n.priority != null ? n.priority.name() : 'LOW'}">
+	    <span th:case="'HIGH'"   style="padding:2px 8px;border:1px solid #ffb3b3;border-radius:10px;">Високий</span>
+	    <span th:case="'MEDIUM'" style="padding:2px 8px;border:1px solid #ffd480;border-radius:10px;">Середній</span>
+	    <span th:case="*"
+	          style="padding:2px 8px;border:1px solid #b3ffb3;border-radius:10px;">Низький</span>
+	  </span>
+      <div class="right" style="margin-left:auto; display:flex; gap:8px;">
+        <a th:href="@{|/notes/${n.id}/edit|}" class="btn-action">Редагувати</a>
+		<a th:href="@{|/public/${n.shareKey}|}" target="_blank" class="btn-action">Посилання</a>
+        <form th:action="@{|/notes/${n.id}/delete|}" method="post">
+          <button type="submit" class="btn-action danger">Видалити</button>
+        </form>
+      </div>
+    </div>
+    <div th:text="${n.content}">Текст...</div>
+    <div class="muted" th:text="${#temporals.format(n.createdAt, 'yyyy-MM-dd HH:mm:ss')}">дата</div>
+  </div>
+</body>
+</html>

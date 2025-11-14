@@ -1,0 +1,37 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Edit note</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 32px; }
+    form { border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
+    input[type=text], textarea { width: 100%; padding: 8px; margin: 6px 0; }
+    .row { display:flex; gap:12px; }
+    a, button { padding: 6px 12px; display:inline-block; text-decoration:none; }
+  </style>
+</head>
+<body>
+	<h1>Редагувати нотатку</h1>
+
+	<form th:action="@{|/notes/${note.id}|}" method="post" th:object="${note}">
+	  <label>Заголовок</label>
+	  <input type="text" name="title" th:value="*{title}" />
+
+	  <label>Текст</label>
+	  <textarea name="content" rows="6" th:text="*{content}"></textarea>
+	  
+	  <label>Пріоритет</label>
+	  <select name="priority" th:field="*{priority}">
+	    <option value="LOW"    th:selected="${note.priority?.name() == 'LOW'}">Низький</option>
+	    <option value="MEDIUM" th:selected="${note.priority?.name() == 'MEDIUM'}">Середній</option>
+	    <option value="HIGH"   th:selected="${note.priority?.name() == 'HIGH'}">Високий</option>
+	  </select>
+
+	  <div class="row">
+	    <button type="submit">Зберегти</button>
+	    <a href="/">Скасувати</a>
+	  </div>
+	</form>
+</body>
+</html>
