@@ -1,0 +1,305 @@
+openapi: 3.1.0
+info:
+  title: Notepad REST API
+  description: |
+    RESTful API для управління нотатками. Підтримує CRUD-операції, фільтрацію, пагінацію, часткове оновлення (JSON Patch),
+    пріоритети та безпечне очищення HTML-вмісту.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@notepad.example.com
+
+servers:
+  - url: http://localhost:8080
+    description: Локальний сервер розробки
+
+tags:
+  - name: Notes API
+    description: Операції з нотатками
+
+paths:
+  /api/notes:
+    get:
+      tags: [Notes API]
+      summary: Отримати список нотаток з фільтрацією та пагінацією
+      description: |
+        Повертає список нотаток, відсортованих за датою створення (від нових до старих).
+        Підтримує:
+        - Пошук за назвою (`q`)
+        - Фільтр за пріоритетом
+        - Пагінацію (`page`, `size`)
+        - Заголовки: `X-Total-Count`, `X-Page`, `X-Size`
+      parameters:
+        - name: q
+          in: query
+          description: Пошуковий запит (частина назви нотатки, нечутливий до регістру)
+          required: false
+          schema:
+            type: string
+            example: "зустріч"
+        - name: priorityStr
+          in: query
+          description: Фільтр за пріоритетом (LOW, MEDIUM, HIGH)
+          required: false
+          schema:
+            type: string
+            enum: [LOW, MEDIUM, HIGH]
+            example: HIGH
+        - name: page
+          in: query
+          description: Номер сторінки (починаючи з 0)
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+        - name: size
+          in: query
+          description: Кількість елементів на сторінці
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+            example: 10
+      responses:
+        '200':
+          description: Успішно повернуто список нотаток
+          headers:
+            X-Total-Count:
+              description: Загальна кількість нотаток після фільтрації
+              schema:
+                type: integer
+            X-Page:
+              description: Поточна сторінка
+              schema:
+                type: integer
+            X-Size:
+              description: Розмір сторінки
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NoteResponse'
+        '400':
+          description: Некоректний пріоритет (наприклад, "INVALID")
+        '500':
+          description: Внутрішня помилка сервера
+
+    post:
+      tags: [Notes API]
+      summary: Створити нову нотатку
+      description: |
+        Створює нову нотатку з вказаним заголовком, вмістом та пріоритетом.
+        - Заголовок обрізається (`trim()`), якщо `null` — стає порожнім рядком.
+        - Вміст очищається від XSS через Jsoup.
+        - Пріоритет за замовчуванням: `MEDIUM`.
+        - Повертається `201 Created` з повною інформацією про нотатку.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+            example:
+              title: "Зустріч з клієнтом"
+              content: "<p>Обговорити <b>новий проєкт</b></p>"
+              priority: HIGH
+      responses:
+        '201':
+          description: Нотатка успішно створена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+        '400':
+          description: Некоректні дані у тілі запиту
+        '500':
+          description: Внутрішня помилка сервера
+
+  /api/notes/{id}:
+    get:
+      tags: [Notes API]
+      summary: Отримати нотатку за ID
+      description: Повертає повну інформацію про нотатку, включаючи `createdAt` та `priority`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Унікальний ідентифікатор нотатки
+          schema:
+            type: integer
+            format: int64
+            example: 1
+      responses:
+        '200':
+          description: Нотатка знайдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+        '404':
+          description: Нотатку з таким ID не знайдено
+        '500':
+          description: Внутрішня помилка сервера
+
+    put:
+      tags: [Notes API]
+      summary: Повністю оновити нотатку
+      description: |
+        Замінює всі поля нотатки (окрім `id` та `createdAt`).
+        - Вміст очищається від XSS.
+        - Якщо `title` — `null`, стає порожнім рядком.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+      responses:
+        '200':
+          description: Нотатка успішно оновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+        '404':
+          description: Нотатка не знайдена
+        '400':
+          description: Некоректні дані
+        '500':
+          description: Внутрішня помилка
+
+    patch:
+      tags: [Notes API]
+      summary: Часткове оновлення (JSON Patch, RFC 6902)
+      description: |
+        Дозволяє оновити лише окремі поля нотатки за допомогою JSON Patch.
+        Підтримує операції: `replace`.
+        Приклад: змінити лише `priority`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json-patch+json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  op:
+                    type: string
+                    enum: [replace]
+                  path:
+                    type: string
+                    enum: [/title, /content, /priority]
+                  value:
+                    type: string
+                required: [op, path, value]
+            example:
+              - op: replace
+                path: /priority
+                value: HIGH
+      responses:
+        '200':
+          description: Нотатка успішно оновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteResponse'
+        '400':
+          description: Некоректний JSON Patch (наприклад, невалідний шлях або значення)
+        '404':
+          description: Нотатка не знайдена
+        '500':
+          description: Внутрішня помилка
+
+    delete:
+      tags: [Notes API]
+      summary: Видалити нотатку
+      description: Видаляє нотатку за ID. Повертає `204 No Content`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Нотатка успішно видалена
+        '404':
+          description: Нотатка не знайдена
+        '500':
+          description: Внутрішня помилка
+
+components:
+  schemas:
+    NoteRequest:
+      type: object
+      description: DTO для створення та оновлення нотатки
+      properties:
+        title:
+          type: string
+          description: Заголовок нотатки (може бути порожнім)
+          example: "Нова задача"
+        content:
+          type: string
+          description: HTML-вміст нотатки (буде очищений)
+          example: "<p>Зробити <b>звіт</b></p>"
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+          default: MEDIUM
+          description: Пріоритет нотатки
+          example: HIGH
+      required: [title, content]
+
+    NoteResponse:
+      type: object
+      description: DTO для відповіді з даними нотатки
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Унікальний ID
+          example: 1
+        title:
+          type: string
+          example: "Нова задача"
+        content:
+          type: string
+          example: "<p>Зробити <b>звіт</b></p>"
+        priority:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+          example: HIGH
+        createdAt:
+          type: string
+          format: date-time
+          description: Час створення (ISO 8601)
+          example: "2025-11-14T10:30:00Z"
+      required: [id, title, content, priority, createdAt]
+
+    Priority:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+      description: Пріоритет нотатки
